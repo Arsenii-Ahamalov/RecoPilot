@@ -1,134 +1,102 @@
 # RecoPilot
 
-**A starter template for building and deploying end-to-end recommender systems.**
+**A Movie-Lens 1M based movie-recommendation project**
 
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)]() [![License](https://img.shields.io/badge/license-MIT-green)]()
+[![Python](https://img.shields.io/badge/python-3.8%2B-blue)]() [![License](https://img.shields.io/badge/license-MIT-green)]()
 
-## Table of Contents
-- [Features](#features)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Project Structure](#project-structure)
-- [Data Preparation](#data-preparation)
-- [Training](#training)
-- [Evaluation](#evaluation)
-- [Usage](#usage)
-- [Docker](#docker)
-- [Testing](#testing)
-- [Configuration](#configuration)
-- [Contributing](#contributing)
-- [License](#license)
+---
 
-## Features
-- **Memory-based Collaborative Filtering**: User-User and Item-Item methods with cosine similarity.  
-- **Model-based Collaborative Filtering**: Matrix factorization via SVD and ALS.  
-- **Evaluation Metrics**: RMSE for rating prediction; Precision@K, Recall@K, MAP@K for top-N.  
-- **Modular Codebase**: Clear separation between data processing, modeling, and serving.  
-- **Command-Line Interface**: Fast, scriptable recommendations via terminal commands.  
-- **REST API**: FastAPI endpoints for training and inference.  
-- **Web Demo**: Simple React-free web page for interactive recommendations.  
-- **Docker Support**: Containerized setup for consistent deployment.  
-- **Reproducible Notebooks**: Example Jupyter notebooks for EDA and experiments.  
-- **Unit Tests**: Automated tests for key components.
+## 1 Overview
+RecoPilot is an end-to-end learning project that walks from data exploration through model deployment.
 
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Exploratory data analysis (EDA) | ✅ Complete |
+| 2 | Data preprocessing & feature engineering | ✅ Complete |
+| 3 | Algorithm implementation (baselines → CF → MF → hybrid) | 🚀 Ready to start |
+| 4 | Evaluation & model selection | ⏳ |
+| 5 | Flask API + web demo | ⏳ |
 
-## Installation
-1. **Clone the repository**:  
-   `git clone https://github.com/<your-username>/RecoPilot.git && cd RecoPilot`  
-2. **Create and activate virtual environment**:  
-   `python -m venv venv`  
-   `source venv/bin/activate  # Linux/macOS`  
-   `venv\Scripts\activate     # Windows`  
-3. **Install dependencies**:  
-   `pip install -r requirements.txt`
+---
 
-## Project Structure
-```
+## 2 Project Structure
+```text
 RecoPilot/
-├── README.md               
-├── LICENSE                 
-├── requirements.txt        
+├── README.md
+├── LICENSE
+├── requirements.txt
+│
 ├── data/
-│   ├── raw/                
-│   └── processed/          
-├── notebooks/
-│   ├── 01_EDA.ipynb
-│   ├── 02_Baseline.ipynb
-│   └── 03_Factorization.ipynb
+│   ├── movies.dat                # raw MovieLens files
+│   ├── ratings.dat
+│   ├── users.dat
+│   ├── movies_processed.csv      # cleaned & tokenised
+│   ├── ratings_processed.csv
+│   └── users_processed.csv
+│
 ├── src/
-│   ├── data_preprocessing.py
-│   ├── baseline_model.py
-│   ├── memory_based.py
-│   ├── factorization.py
-│   └── utils.py
-├── app/
-│   ├── main.py             
-│   └── Dockerfile
-├── models/                 
-├── tests/
-│   ├── test_data.py
-│   └── test_models.py
-└── docs/
-    └── demo.gif
+│   ├── notebooks/                # Phase notebooks
+│   │   ├── data_exploration.ipynb    # Phase-1 EDA
+│   │   └── data_preprocessing.ipynb  # Phase-2 preprocessing
+│   └── algorithms/               # Phase-3 recommendation algorithms
+│       ├── base.py              # Abstract base class
+│       ├── baselines.py         # Global/user/movie averages
+│       ├── collaborative.py     # User-based & item-based CF
+│       ├── matrix_factorization.py # SVD, ALS, NMF
+│       ├── content_based.py     # Genre & demographic filtering
+│       └── hybrid.py            # Combined approaches
+│
+├── docs/
+│   ├── phase1-data-exploration-summary.md
+│   └── phase2-data-preprocessing.md
+│
+├── models/                       # saved models
+├── tests/                        # algorithm unit tests
+└── app/                          # Flask API / front-end (future)
 ```
 
-## Data Preparation
-Place your dataset (e.g., `ratings.csv`) in `data/raw/`. The CSV should have columns: `user_id`, `item_id`, `rating`.
-Run preprocessing:  
-```
-python src/data_preprocessing.py --input_path data/raw/ratings.csv --output_path data/processed/ratings_processed.csv
+---
+
+## 3 Installation
+```bash
+git clone https://github.com/Arsenii-Ahamalov/RecoPilot.git
+cd RecoPilot
+python -m venv venv           # create venv
+source venv/bin/activate      # Linux/macOS
+# venv\Scripts\activate       # Windows
+pip install -r requirements.txt
 ```
 
-## Training
-```
-python src/train.py \
-  --data_path data/processed/ratings_processed.csv \
-  --model_type [baseline|memory|als|svd] \
-  --params_path config/model_params.yaml \
-  --output_dir models/
-```
-Trained models will be saved in `models/`.
+---
 
-## Evaluation
-```
-python src/evaluate.py \
-  --model_path models/model.pkl \
-  --test_data data/processed/test.csv \
-  --metrics_path reports/metrics.json
-```
-Outputs RMSE, Precision@K, Recall@K, and MAP@K.
+## 4 Data Preparation
+Pre-processed CSV files (`movies_processed.csv`, `ratings_processed.csv`, `users_processed.csv`) live directly in the `data/` folder. To regenerate them, open and run **`src/data_preprocessing.ipynb`**.
 
-## Usage
-### CLI
-```
-python src/predict.py --liked_items "The Matrix,Inception,Interstellar" --top_k 5
-```
-### API
-```
-uvicorn app.main:app --reload
-```
-- `POST /train` to train model  
-- `GET /recommend?user_id={id}&k={top_k}` to get recommendations  
-### Web Interface
-Open `http://localhost:8000/`, enter user ID or liked items, click **Get Recommendations**.
+---
 
+## 5 Planned Algorithms (Phase 3)
+1. **Baselines** – global / user / movie averages  
+2. **Memory-based CF** – user-user & item-item (cosine / Pearson)  
+3. **Matrix factorisation** – SVD / ALS / NMF  
+4. **Content-based** – genre & year profile matching  
+5. **Hybrid** – combine CF + content + demographics
 
+Evaluation metrics: RMSE (prediction) and Precision@K / Recall@K / NDCG (top-N).
 
-## Testing
-```
-pytest --maxfail=1 --disable-warnings -q
-```
+---
 
-## Configuration
-- `config/model_params.yaml` for hyperparameters  
-- `config/app_config.yaml` for API settings
+## 6 Road-map
+- [ ] Implement baselines in `src/`  
+- [ ] Build CF models & evaluation notebook  
+- [ ] Train MF model, compare results  
+- [ ] Save best model → `models/`  
+- [ ] Expose recommendations via Flask API (`app/`)  
+- [ ] Front-end demo page
 
-## Contributing
-1. Fork the repo  
-2. Create a branch (`git checkout -b feature/my-feature`)  
-3. Commit (`git commit -m 'Add feature'`)  
-4. Push (`git push origin feature/my-feature`)  
-5. Open a PR
+---
 
-## License
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+## 7 License
+MIT – see `LICENSE`.
+
+---
+*Last updated 2025-07-20*
