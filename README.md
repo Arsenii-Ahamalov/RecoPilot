@@ -42,7 +42,7 @@ RecoPilot/
 │       ├── base.py              # Abstract base class
 │       ├── baselines.py         # Global/user/movie averages
 │       ├── collaborative.py     # User-based & item-based CF
-│       ├── matrix_factorization.py # SVD, ALS, NMF
+│       ├── matrix_factorization.py # SVD, Basic
 │       ├── content_based.py     # Genre & demographic filtering
 │       └── hybrid.py            # Combined approaches
 │
@@ -77,7 +77,7 @@ Pre-processed CSV files (`movies_processed.csv`, `ratings_processed.csv`, `users
 ## 5 Planned Algorithms (Phase 3)
 1. **Baselines** – global / user / movie averages  
 2. **Memory-based CF** – user-user & item-item (cosine / Pearson)  
-3. **Matrix factorisation** – SVD / ALS / NMF  
+3. **Matrix factorisation** – SVD / Basic 
 4. **Content-based** – genre & year profile matching  
 5. **Hybrid** – combine CF + content + demographics
 

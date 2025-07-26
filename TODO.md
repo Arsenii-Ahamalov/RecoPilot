@@ -16,7 +16,28 @@ Create `MemoryBasedRecommender` base class that contains:
 - Shared rating prediction formula
 - Abstract similarity calculation method for subclasses to implement
 
-## 2. Think About Smarter Weight Strategy
+## 2. Incorporate Temporal Information (Timestamps & Movie Age)
+
+### Current Limitations:
+- **No timestamp usage**: All ratings treated equally regardless of when they occurred
+- **No movie age consideration**: Classic movies vs new releases treated identically
+- **Static preferences assumption**: User tastes assumed constant over time
+- **Missing trend awareness**: Can't capture seasonal patterns or popularity shifts
+
+### Implementation Areas:
+- **Time-Weighted Collaborative Filtering**: Recent ratings have higher influence in similarity calculations
+- **Temporal Matrix Factorization**: Add time-specific bias terms and temporal factors
+- **Movie Age as Content Feature**: Include release year, age categories (Classic/Retro/Modern) in content-based filtering
+- **Session-Based Recommendations**: Weight recent viewing patterns more heavily
+- **Seasonal/Trend Awareness**: Capture time-of-year preferences and popularity trends
+
+### Specific Tasks:
+1. **Modify UserBasedCF**: Add `time_decay_factor` parameter and time-weighted similarity calculation
+2. **Extend ContentBased**: Add movie age features (age, decade, era) to similarity calculations
+3. **Enhance BasicMatrixFactorization**: Include temporal bias terms and time bins (monthly/yearly)
+
+
+## 3. Think About Smarter Weight Strategy
 
 ### Current Limitations:
 - Simple equal weights or basic formulas
@@ -30,7 +51,7 @@ Create `MemoryBasedRecommender` base class that contains:
 - **Time-decay weights for recent vs old ratings**: Recent ratings should have more influence
 - **Confidence-based weighting**: More ratings = higher confidence, adjust weights accordingly
 
-## 3. Implement Non-Regression Based Algorithms
+## 4. Implement Non-Regression Based Algorithms
 
 ### Current State:
 All algorithms predict exact ratings (regression approach)
@@ -43,8 +64,9 @@ All algorithms predict exact ratings (regression approach)
 
 ## Implementation Priority:
 1. **High Priority**: Architecture refactoring (reduces maintenance burden)
-2. **Medium Priority**: Smarter weight strategy (improves existing algorithms)  
-3. **Low Priority**: Non-regression algorithms (research/experimental phase)
+2. **High Priority**: Temporal information integration (significant accuracy improvements expected)
+3. **Medium Priority**: Smarter weight strategy (improves existing algorithms)  
+4. **Low Priority**: Non-regression algorithms (research/experimental phase)
 
 ---
-*Last updated: 25.07.2025* 
+*Last updated: 26.07.2025* 
