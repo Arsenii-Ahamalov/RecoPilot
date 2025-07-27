@@ -51,7 +51,7 @@ RecoPilot/
 │   ├── phase2-data-preprocessing.md
 │   └── phase3-algorithm-implementation.md
 │
-├── models/                       # saved models (future)
+├── models/                       # saved models with best parameters (unfitted)
 ├── tests/                        # comprehensive algorithm tests (500+ cases)
 │   ├── test_baselines.py         # baseline algorithm tests
 │   ├── test_collaborative_filtering.py # CF algorithm tests
@@ -91,7 +91,14 @@ Pre-processed CSV files (`movies_processed.csv`, `ratings_processed.csv`, `users
 
 ---
 
-## 6 Road-map
+## 6 Model Storage Strategy
+**Models are saved unfitted with best parameters** for production flexibility:
+- **Unfitted models**: Ready to fit with fresh data (including new users)
+- **Best parameters**: Pre-configured with optimal hyperparameters from tuning
+- **Easy deployment**: Just call `model.fit(new_data)` when new users arrive
+- **No outdated models**: Always uses latest data, no cached stale models
+
+## 7 Road-map
 - [x] **Phase 1**: Data exploration & analysis
 - [x] **Phase 2**: Data preprocessing & feature engineering  
 - [x] **Phase 3**: Algorithm implementation (8 algorithms + comprehensive testing)
