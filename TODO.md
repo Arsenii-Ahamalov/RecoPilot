@@ -62,11 +62,34 @@ All algorithms predict exact ratings (regression approach)
 - **Deep learning approaches**: Neural collaborative filtering, autoencoders
 - **Association rule mining**: "Users who liked X also liked Y" patterns
 
+## 5. Advanced Hybrid System Tuning (Joint Optimization)
+
+### Current Approach:
+Sequential tuning - optimize each algorithm individually, then tune hybrid weights
+
+### Advanced Strategy:
+**Joint parameter optimization** for hybrid systems:
+- **Simultaneous tuning**: Optimize individual algorithm parameters + hybrid weights together
+- **Complementary optimization**: Find parameter combinations where algorithms compensate for each other's weaknesses
+- **Synergy discovery**: Identify configurations where 1+1 > 2 (better than individual best)
+
+### Implementation Plan:
+1. **Baseline**: Use sequential tuning results as starting point
+2. **Joint grid search**: Test combinations of individual parameters + weight distributions
+3. **Performance comparison**: Compare sequential vs joint optimization results
+4. **Analysis**: Understand when joint optimization provides significant improvements
+
+### Expected Benefits:
+- **Better hybrid performance**: Algorithms can compensate for each other's suboptimal settings
+- **Synergy discovery**: Find unexpected parameter combinations that work well together
+- **Research insights**: Understand algorithm interactions and complementarity
+
 ## Implementation Priority:
 1. **High Priority**: Architecture refactoring (reduces maintenance burden)
 2. **High Priority**: Temporal information integration (significant accuracy improvements expected)
 3. **Medium Priority**: Smarter weight strategy (improves existing algorithms)  
-4. **Low Priority**: Non-regression algorithms (research/experimental phase)
+4. **Medium Priority**: Advanced hybrid tuning (improves hybrid system performance)
+5. **Low Priority**: Non-regression algorithms (research/experimental phase)
 
 ---
-*Last updated: 26.07.2025* 
+*Last updated: 27.07.2025* 
