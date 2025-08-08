@@ -44,6 +44,8 @@ class GenreBasedRecommender(BaseRecommender):
         """
         self.data = ratings_df
         self.movie_data = movie_df
+        # Precompute join for faster lookups: user->(movieId,rating); movie->genres
+        self.user_means = self.data.groupby('userId')['rating'].mean()
         self.is_fitted = True
         return self
     
@@ -79,20 +81,44 @@ class GenreBasedRecommender(BaseRecommender):
         if not existing_rating.empty:
             return existing_rating['rating'].iloc[0] 
 
-        movie_info = self.movie_data[self.movie_data['movieId'] == item_id].iloc[0]
-        genres = [col for col in self.movie_data.columns 
-                 if movie_info[col] == 1 and col not in ['movieId', 'release_year']]
-        
-        result_data = []
-        for genre in genres:
-            genre_data = self.__find_genre_data(genre, user_id)
-            if genre_data[0] == -1:  
-                genre_mean = self.__find_genre_mean(genre)
-                result_data.append((genre_mean, 1))  
-            else:
-                result_data.append(genre_data)  
-        
-        return self.__calculate_users_rating(result_data)
+        movie_row = self.movie_data[self.movie_data['movieId'] == item_id]
+        if movie_row.empty:
+            return 3.0
+        movie_info = movie_row.iloc[0]
+        genre_cols = [c for c in self.movie_data.columns if c not in ['movieId', 'release_year']]
+        movie_genre_mask = movie_info[genre_cols].values.astype(bool)
+        selected_genres = [g for g, m in zip(genre_cols, movie_genre_mask) if m]
+
+        if not selected_genres:
+            return 3.0
+
+        # For all selected genres, compute user genre mean and count in vectorized way
+        users_movies = self.data[self.data['userId'] == user_id][['movieId', 'rating']]
+        if users_movies.empty:
+            # No ratings by user -> fallback to global genre means averaged
+            genre_means = np.array([self.__find_genre_mean(g) for g in selected_genres], dtype=float)
+            return float(np.mean(genre_means)) if len(genre_means) else 3.0
+
+        users_movie_meta = self.movie_data.set_index('movieId').reindex(users_movies['movieId'].values)
+        genre_matrix = users_movie_meta[selected_genres].values.astype(int)
+        ratings_vec = users_movies['rating'].values.reshape(-1, 1)
+        counts = genre_matrix.sum(axis=0)
+        with np.errstate(invalid='ignore'):
+            sums = (genre_matrix * ratings_vec).sum(axis=0)
+            user_genre_means = np.divide(sums, counts, where=counts != 0)
+
+        # Where user has no genre history, use global genre mean fallback
+        for idx, g in enumerate(selected_genres):
+            if counts[idx] == 0 or not np.isfinite(user_genre_means[idx]):
+                user_genre_means[idx] = self.__find_genre_mean(g)
+                counts[idx] = 1
+
+        # Weighted average by counts
+        weighted = np.dot(user_genre_means, counts)
+        denom = counts.sum()
+        if denom == 0:
+            return 3.0
+        return float(weighted / denom)
     
     def __find_genre_data(self, genre: str, user_id: int) -> tuple:
         """
@@ -105,19 +131,16 @@ class GenreBasedRecommender(BaseRecommender):
         Returns:
             tuple: (average_rating, movie_count) for this genre, or (-1, 0) if no movies rated
         """
-        users_movies_id = self.data[self.data['userId'] == user_id]['movieId'].values
-        users_movie = self.movie_data[self.movie_data['movieId'].isin(users_movies_id)]
-        
-        genre_movies_id = users_movie[users_movie[genre] == 1]['movieId'].values
-        movies_count = len(genre_movies_id)
-        
-        if movies_count == 0:
-            return (-1, 0)  
-        
-        genre_mean = self.data[(self.data['userId'] == user_id) & 
-                              (self.data['movieId'].isin(genre_movies_id))]['rating'].mean()
-        
-        return (genre_mean, movies_count)
+        users_movies = self.data[self.data['userId'] == user_id][['movieId', 'rating']]
+        if users_movies.empty:
+            return (-1, 0)
+        meta = self.movie_data.set_index('movieId').reindex(users_movies['movieId'].values)
+        mask = meta[genre].values.astype(bool)
+        count = int(mask.sum())
+        if count == 0:
+            return (-1, 0)
+        genre_mean = float(users_movies['rating'].values[mask].mean())
+        return (genre_mean, count)
     
     def __find_genre_mean(self, genre: str) -> float:
         """
@@ -130,8 +153,9 @@ class GenreBasedRecommender(BaseRecommender):
             float: Global average rating for movies in this genre
         """
         genre_movies = self.movie_data[self.movie_data[genre] == 1]['movieId'].values
-        global_genre_mean = self.data[self.data['movieId'].isin(genre_movies)]['rating'].mean()
-        return global_genre_mean
+        if len(genre_movies) == 0:
+            return 3.0
+        return float(self.data[self.data['movieId'].isin(genre_movies)]['rating'].mean())
     
     def __calculate_users_rating(self, result_data: list) -> float:
         """
@@ -146,14 +170,15 @@ class GenreBasedRecommender(BaseRecommender):
         Returns:
             float: Weighted average rating, or 3.0 if no valid data
         """
-        total_weighted_score = 0
-        total_weight = 0
-        
-        for rating, weight in result_data:
-            total_weighted_score += rating * weight
-            total_weight += weight
-        
-        return total_weighted_score / total_weight if total_weight > 0 else 3.0
+        if not result_data:
+            return 3.0
+        arr = np.array(result_data, dtype=float)
+        weights = arr[:, 1]
+        scores = arr[:, 0]
+        denom = weights.sum()
+        if denom == 0:
+            return 3.0
+        return float(np.dot(scores, weights) / denom)
 
 
 class DemographicBasedRecommender(BaseRecommender):

@@ -111,38 +111,49 @@ class BasicMatrixFactorization(BaseRecommender):
         self.user_bias = np.zeros(n_users)
         self.item_bias = np.zeros(n_items)
         
-        # Stochastic Gradient Descent training
-        for epoch in range(self.epochs):
-            for _, row in ratings_df.iterrows():
-                user_id = row['userId']
-                item_id = row['movieId']
-                rating = row['rating']
-                
-                # Convert IDs to indices
-                user_idx = self.user_id_to_idx[user_id]
-                item_idx = self.item_id_to_idx[item_id]
-                
-                prediction = self._predict_single(user_idx, item_idx)
-                error = rating - prediction
-                
-                user_factors_old = self.user_factors[user_idx].copy()
-                item_factors_old = self.item_factors[item_idx].copy()
-                user_bias_old = self.user_bias[user_idx]
-                item_bias_old = self.item_bias[item_idx]
-                
-                self.user_factors[user_idx] += self.learning_rate * (
-                    error * item_factors_old - self.reg * user_factors_old
-                )
-                self.item_factors[item_idx] += self.learning_rate * (
-                    error * user_factors_old - self.reg * item_factors_old
-                )
-                
-                self.user_bias[user_idx] += self.learning_rate * (
-                    error - self.reg * user_bias_old
-                )
-                self.item_bias[item_idx] += self.learning_rate * (
-                    error - self.reg * item_bias_old
-                )
+        # Prepare vectorized indices and ratings arrays for SGD-like updates
+        if len(ratings_df) == 0:
+            self.is_fitted = True
+            return self
+
+        user_indices = ratings_df['userId'].map(self.user_id_to_idx).values
+        item_indices = ratings_df['movieId'].map(self.item_id_to_idx).values
+        ratings_array = ratings_df['rating'].values.astype(float)
+
+        # Epoch loop with vectorized mini-batch style updates
+        for _ in range(self.epochs):
+            # Predictions for all observed entries
+            preds = (
+                np.sum(self.user_factors[user_indices] * self.item_factors[item_indices], axis=1)
+                + self.user_bias[user_indices]
+                + self.item_bias[item_indices]
+                + self.global_bias
+            )
+            errors = ratings_array - preds
+
+            # Accumulate gradients per user and per item via scatter-add
+            # dL/dU[u] = -2 * sum_e(error_e * I[i_e]) + 2*reg*U[u]
+            grad_user_factors = np.zeros_like(self.user_factors)
+            np.add.at(grad_user_factors, user_indices, -(errors[:, None] * self.item_factors[item_indices]))
+            grad_user_factors += self.reg * self.user_factors
+
+            grad_item_factors = np.zeros_like(self.item_factors)
+            np.add.at(grad_item_factors, item_indices, -(errors[:, None] * self.user_factors[user_indices]))
+            grad_item_factors += self.reg * self.item_factors
+
+            grad_user_bias = np.zeros_like(self.user_bias)
+            np.add.at(grad_user_bias, user_indices, -errors)
+            grad_user_bias += self.reg * self.user_bias
+
+            grad_item_bias = np.zeros_like(self.item_bias)
+            np.add.at(grad_item_bias, item_indices, -errors)
+            grad_item_bias += self.reg * self.item_bias
+
+            # Gradient descent step
+            self.user_factors -= self.learning_rate * grad_user_factors
+            self.item_factors -= self.learning_rate * grad_item_factors
+            self.user_bias -= self.learning_rate * grad_user_bias
+            self.item_bias -= self.learning_rate * grad_item_bias
         
         self.is_fitted = True
         return self
