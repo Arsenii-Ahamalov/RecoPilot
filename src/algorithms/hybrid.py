@@ -49,7 +49,7 @@ class HybridRecommender(BaseRecommender):
         >>> prediction = hybrid.predict(user_id=1, item_id=101)
     """
     
-    def __init__(self, algorithms: dict[str, BaseRecommender], weights: dict[str, float] = None):
+    def __init__(self, algorithms: dict[str, BaseRecommender], weights: dict[str, float] = None,movies_df: pd.DataFrame = None,users_df: pd.DataFrame = None):
         """
         Initialize the Hybrid Recommender system.
         
@@ -67,7 +67,8 @@ class HybridRecommender(BaseRecommender):
         """
         super().__init__() 
         self.algorithms = algorithms
-        
+        self.movies_df = movies_df
+        self.users_df = users_df
         if weights is None:
             n_algs = len(algorithms)
             self.weights = {name: 1.0/n_algs for name in algorithms.keys()}
@@ -83,29 +84,39 @@ class HybridRecommender(BaseRecommender):
     
     def fit(self, ratings_df: pd.DataFrame) -> 'HybridRecommender':
         """
-        Train all algorithms in the hybrid system.
-        
-        This method validates that all algorithms inherit from BaseRecommender,
-        then trains each algorithm sequentially using the same training data.
-        
-        Args:
-            ratings_df (pd.DataFrame): Training data with columns ['userId', 'movieId', 'rating']
-            
-        Returns:
-            HybridRecommender: Self for method chaining
-            
-        Raises:
-            TypeError: If any algorithm doesn't inherit from BaseRecommender
+        Fit component algorithms for the hybrid model, or skip fitting.
+
+        Behavior
+          - Trains the algorithms in self.algorithms on ratings_df.
+          - Special cases:
+            - 'GenreBasedRecommender' is fitted with (ratings_df, self.movies_df)
+            - 'DemographicBasedRecommender' is fitted with (ratings_df, self.users_df)
+          - Validates that all algorithms inherit from BaseRecommender.
+          - Sets self.data = ratings_df.
+
+        Args
+        - ratings_df: Training data with columns ['userId', 'movieId', 'rating'].
+
+        Returns
+        - HybridRecommender: self (for chaining).
+
+        Raises
+        - TypeError: if any algorithm in self.algorithms is not a BaseRecommender
+                     (checked when skip_fit is False).
         """
         self.data = ratings_df  
-        
+   
+        for name, algorithm in self.algorithms.items():
+            if name == 'GenreBasedRecommender':
+                algorithm.fit(ratings_df,self.movies_df)
+            elif name == 'DemographicBasedRecommender':
+                algorithm.fit(ratings_df,self.users_df)
+            else:
+                algorithm.fit(ratings_df)
         for name, algorithm in self.algorithms.items():
             if not isinstance(algorithm, BaseRecommender):
                 raise TypeError(f"Algorithm '{name}' must inherit from BaseRecommender")
-        
-        for name, algorithm in self.algorithms.items():
-            algorithm.fit(ratings_df)
-        
+
         self.is_fitted = True
         return self
     

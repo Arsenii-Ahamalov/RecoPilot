@@ -426,26 +426,12 @@ class ItemBasedCF(BaseRecommender):
         Returns:
             float: Adjusted cosine similarity between -1 and 1
         """
-<<<<<<< HEAD
         u1 = self.item_users.get(item1)
         u2 = self.item_users.get(item2)
         if u1 is None or u2 is None:
             return 0.0
         common, idx1, idx2 = np.intersect1d(u1, u2, assume_unique=False, return_indices=True)
         if common.size < 2:
-=======
-        i1 = self.data[self.data['movieId'] == item1][['userId', 'rating']].rename(columns={'rating': 'r1'})
-        i2 = self.data[self.data['movieId'] == item2][['userId', 'rating']].rename(columns={'rating': 'r2'})
-        merged = i1.merge(i2, on='userId', how='inner')
-        if merged.empty:
-            return 0.0
-        user_means = self.user_mean.reindex(merged['userId'].values).values
-        r1_adj = merged['r1'].values - user_means
-        r2_adj = merged['r2'].values - user_means
-        num = np.dot(r1_adj, r2_adj)
-        den = np.sqrt(np.dot(r1_adj, r1_adj) * np.dot(r2_adj, r2_adj))
-        if den == 0 or not np.isfinite(den):
->>>>>>> c2d05ae063b34468e553adf90b0a33230077e573
             return 0.0
         v1 = self.item_adj[item1][idx1]
         v2 = self.item_adj[item2][idx2]

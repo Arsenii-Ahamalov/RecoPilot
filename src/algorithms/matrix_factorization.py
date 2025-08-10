@@ -99,12 +99,13 @@ class BasicMatrixFactorization(BaseRecommender):
         n_users = len(unique_users)
         n_items = len(unique_items)
         
-        self.user_factors = np.random.normal(0, 0.1, (n_users, self.k))
-        self.item_factors = np.random.normal(0, 0.1, (n_items, self.k))
+        scale = 0.01
+        self.user_factors = np.random.normal(0.0, scale, (n_users, self.k)).astype(np.float64)
+        self.item_factors = np.random.normal(0.0, scale, (n_items, self.k)).astype(np.float64)
         
-        self.global_bias = ratings_df['rating'].mean()
-        self.user_bias = np.zeros(n_users)
-        self.item_bias = np.zeros(n_items)
+        self.global_bias = float(ratings_df['rating'].mean())
+        self.user_bias = np.zeros(n_users, dtype=np.float64)
+        self.item_bias = np.zeros(n_items, dtype=np.float64)
         
         if len(ratings_df) == 0:
             self.is_fitted = True
@@ -114,7 +115,8 @@ class BasicMatrixFactorization(BaseRecommender):
         item_indices = ratings_df['movieId'].map(self.item_id_to_idx).values
         ratings_array = ratings_df['rating'].values.astype(float)
 
-        for _ in range(self.epochs):
+        N = float(len(ratings_array)) if len(ratings_array) > 0 else 1.0
+        for epoch in range(self.epochs):
             preds = (
                 np.sum(self.user_factors[user_indices] * self.item_factors[item_indices], axis=1)
                 + self.user_bias[user_indices]
@@ -123,27 +125,33 @@ class BasicMatrixFactorization(BaseRecommender):
             )
             errors = ratings_array - preds
 
-     
             grad_user_factors = np.zeros_like(self.user_factors)
             np.add.at(grad_user_factors, user_indices, -(errors[:, None] * self.item_factors[item_indices]))
-            grad_user_factors += self.reg * self.user_factors
+            grad_user_factors = (grad_user_factors / N) + (self.reg * self.user_factors)
 
             grad_item_factors = np.zeros_like(self.item_factors)
             np.add.at(grad_item_factors, item_indices, -(errors[:, None] * self.user_factors[user_indices]))
-            grad_item_factors += self.reg * self.item_factors
+            grad_item_factors = (grad_item_factors / N) + (self.reg * self.item_factors)
 
             grad_user_bias = np.zeros_like(self.user_bias)
             np.add.at(grad_user_bias, user_indices, -errors)
-            grad_user_bias += self.reg * self.user_bias
+            grad_user_bias = (grad_user_bias / N) + (self.reg * self.user_bias)
 
             grad_item_bias = np.zeros_like(self.item_bias)
             np.add.at(grad_item_bias, item_indices, -errors)
-            grad_item_bias += self.reg * self.item_bias
+            grad_item_bias = (grad_item_bias / N) + (self.reg * self.item_bias)
 
-            self.user_factors -= self.learning_rate * grad_user_factors
-            self.item_factors -= self.learning_rate * grad_item_factors
-            self.user_bias -= self.learning_rate * grad_user_bias
-            self.item_bias -= self.learning_rate * grad_item_bias
+            # Gradient clipping to avoid exploding updates
+            np.clip(grad_user_factors, -5.0, 5.0, out=grad_user_factors)
+            np.clip(grad_item_factors, -5.0, 5.0, out=grad_item_factors)
+            np.clip(grad_user_bias, -5.0, 5.0, out=grad_user_bias)
+            np.clip(grad_item_bias, -5.0, 5.0, out=grad_item_bias)
+
+            lr = self.learning_rate / np.sqrt(epoch + 1.0)
+            self.user_factors -= lr * grad_user_factors
+            self.item_factors -= lr * grad_item_factors
+            self.user_bias -= lr * grad_user_bias
+            self.item_bias -= lr * grad_item_bias
         
         self.is_fitted = True
         return self

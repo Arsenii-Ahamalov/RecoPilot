@@ -1,0 +1,6 @@
+{
+  "k": 60,
+  "epochs": 100,
+  "learning_rate": 0.0005,
+  "reg": 0.1
+}
