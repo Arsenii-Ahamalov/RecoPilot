@@ -14,7 +14,7 @@ RecoPilot is an end-to-end learning project that walks from data exploration thr
 | 1 | Exploratory data analysis (EDA) | ✅ Complete |
 | 2 | Data preprocessing & feature engineering | ✅ Complete |
 | 3 | Algorithm implementation (baselines → CF → MF → hybrid) | ✅ Complete |
-| 4 | Evaluation & model selection | 🚀 Ready to start |
+| 4 | Evaluation & model selection | ✅ Complete |
 | 5 | Flask API + web demo | ⏳ |
 
 ---
@@ -49,9 +49,12 @@ RecoPilot/
 ├── docs/
 │   ├── phase1-data-exploration-summary.md
 │   ├── phase2-data-preprocessing.md
-│   └── phase3-algorithm-implementation.md
+│   ├── phase3-algorithm-implementation.md
+│   └── phase4/
+│       ├── conclusion.md                 # Phase 4 summary and results
+│       └── plots/                        # Phase 4 result plots
 │
-├── models/                       # saved models with best parameters (unfitted)
+├── models/                       # saved best parameters (unfitted JSON)
 ├── tests/                        # comprehensive algorithm tests (500+ cases)
 │   ├── test_baselines.py         # baseline algorithm tests
 │   ├── test_collaborative_filtering.py # CF algorithm tests
@@ -87,22 +90,21 @@ Pre-processed CSV files (`movies_processed.csv`, `ratings_processed.csv`, `users
 5. **Hybrid** – Flexible weighted combination with error handling
 
 **Comprehensive features**: Full documentation, 500+ tests, production-ready code.  
-**Next**: Evaluation with RMSE, MAE, Precision@K, Recall@K, NDCG metrics.
+**Next**: Phase 5 – Flask API + web demo.
 
 ---
 
 ## 6 Model Storage Strategy
-**Models are saved unfitted with best parameters** for production flexibility:
-- **Unfitted models**: Ready to fit with fresh data (including new users)
-- **Best parameters**: Pre-configured with optimal hyperparameters from tuning
-- **Easy deployment**: Just call `model.fit(new_data)` when new users arrive
-- **No outdated models**: Always uses latest data, no cached stale models
+**We store unfitted JSON configs with best hyperparameters** for production flexibility:
+- **Unfitted configs**: Instantiate classes and fit on current data
+- **Best parameters**: Frozen from Phase 4 tuning (see `models/*.json`)
+- **Hybrid config**: Selected models and uniform weights saved in `models/Hybrid.json`
 
 ## 7 Road-map
 - [x] **Phase 1**: Data exploration & analysis
 - [x] **Phase 2**: Data preprocessing & feature engineering  
 - [x] **Phase 3**: Algorithm implementation (8 algorithms + comprehensive testing)
-- [ ] **Phase 4**: Evaluation & model comparison
+- [x] **Phase 4**: Evaluation & model comparison
 - [ ] **Phase 5**: Flask API + web demo  
 
 ---
@@ -111,4 +113,4 @@ Pre-processed CSV files (`movies_processed.csv`, `ratings_processed.csv`, `users
 MIT – see `LICENSE`.
 
 ---
-*Last updated 2025-07-26*
+*Last updated 2025-08-10*

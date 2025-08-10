@@ -33,11 +33,11 @@ Hybrid (uniform weights; tuned by cached‑prediction search over all non‑triv
 | Hybrid: Genre + BasicMF (0.5/0.5) | 1.14 | 0.93 | best hybrid (uniform weights)  |
 
 Visuals:
-- User-based CF: ![user-based](user_based_cf_results.png)
-- Item-based CF: ![item-based](item_based_cf_results.png)
-- Demographic: ![demographic](demographic_recommender_results.png)
-- Basic MF: ![basic-mf](basic_matrix_results.png)
-- Hybrid combinations: ![hybrid](hybrid_results.png)
+- User-based CF: ![user-based](plots/user_based_cf_results.png)
+- Item-based CF: ![item-based](plots/item_based_cf_results.png)
+- Demographic: ![demographic](plots/demographic_recommender_results.png)
+- Basic MF: ![basic-mf](plots/basic_matrix_results.png)
+- Hybrid combinations: ![hybrid](plots/hybrid_results.png)
 
 ### Key implementation notes 🧠
 - Fixed evaluation alignment: predictions are computed in the same order as ground truth.
@@ -64,4 +64,4 @@ Interpretation: if RMSE is the primary objective, select BasicMF. If MAE matters
 
 Artifacts 📦:
 - Best params (JSON): see `models/`
-- Models results plots(PNG): see `docs/`
+- Models results plots(PNG): see `docs/phase4/plots/`
