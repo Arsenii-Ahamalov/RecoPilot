@@ -123,6 +123,7 @@ class BasicMatrixFactorization(BaseRecommender):
             )
             errors = ratings_array - preds
 
+     
             grad_user_factors = np.zeros_like(self.user_factors)
             np.add.at(grad_user_factors, user_indices, -(errors[:, None] * self.item_factors[item_indices]))
             grad_user_factors += self.reg * self.user_factors
