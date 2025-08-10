@@ -4,3 +4,4 @@ scipy>=1.11.0
 matplotlib>=3.8.2
 pytest>=8.3.4
 scikit-learn>=1.3.2
+itertools>=1.3.2

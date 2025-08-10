@@ -56,7 +56,6 @@ class UserBasedCF(BaseRecommender):
             UserBasedCF: Self for method chaining
         """
         self.data = ratings_df
-        # Precompute per-user mean to avoid repeated groupby operations
         self.user_mean = self.data.groupby('userId')['rating'].mean()
         self.is_fitted = True
         return self
@@ -85,7 +84,6 @@ class UserBasedCF(BaseRecommender):
         if not self.is_fitted:
             raise ValueError("Model must be fitted before making predictions")
             
-        # Check if user already rated this item
         existing_rating = self.data[
             (self.data['userId'] == user_id) & 
             (self.data['movieId'] == item_id)
@@ -94,23 +92,18 @@ class UserBasedCF(BaseRecommender):
         if not existing_rating.empty:
             return existing_rating['rating'].iloc[0] 
 
-        # Find users who have rated this item
         relevant_users = self._find_relevant_users(item_id)
 
         if len(relevant_users) == 0:
-            # No one rated the item yet – fall back to user's mean
             return float(self.user_mean.get(user_id, self.data['rating'].mean()))
 
-        # Build similarities vectorized for all relevant users at once
         target_r = self.data[self.data['userId'] == user_id][['movieId', 'rating']].rename(columns={'rating': 'r_u'})
         others_r = self.data[self.data['userId'].isin(relevant_users)][['userId', 'movieId', 'rating']].rename(columns={'rating': 'r_v'})
 
         merged = others_r.merge(target_r, on='movieId', how='inner')
         if merged.empty:
-            # No overlap in movies – fall back to user's mean
             return float(self.user_mean.get(user_id, self.data['rating'].mean()))
 
-        # Prepare aggregated sums for Pearson correlation per other user
         merged['x'] = merged['r_u']
         merged['y'] = merged['r_v']
         merged['x2'] = merged['x'] * merged['x']
@@ -126,28 +119,23 @@ class UserBasedCF(BaseRecommender):
             sum_xy=('xy', 'sum')
         )
 
-        # Pearson correlation per other user
         num = agg['sum_xy'] - (agg['sum_x'] * agg['sum_y'] / agg['n'])
         den = np.sqrt((agg['sum_x2'] - (agg['sum_x'] ** 2) / agg['n']) * (agg['sum_y2'] - (agg['sum_y'] ** 2) / agg['n']))
         with np.errstate(divide='ignore', invalid='ignore'):
             sims_series = (num / den).replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
-        # Merge similarities with other users' rating for the item
         item_ratings = self.data[self.data['movieId'] == item_id][['userId', 'rating']].rename(columns={'rating': 'other_item_rating'})
         sim_df = sims_series.rename('similarity').reset_index().merge(item_ratings, on='userId', how='inner')
 
-        # Update cache
         for _, row in sim_df.iterrows():
             ou = int(row['userId'])
             key = (min(user_id, ou), max(user_id, ou))
             self.similarity_cache[key] = float(row['similarity'])
 
-        # Select top-k by similarity
         sim_df = sim_df.sort_values('similarity', ascending=False)
         if len(sim_df) > self.k:
             sim_df = sim_df.head(self.k)
 
-        # Vectorized rating calculation
         target_user_mean = float(self.user_mean.get(user_id, self.data['rating'].mean()))
         other_means = self.user_mean.reindex(sim_df['userId'].values).values
         sims = sim_df['similarity'].values
@@ -209,7 +197,6 @@ class UserBasedCF(BaseRecommender):
                   0 = no correlation
                   -1 = perfect negative correlation
         """
-        # Vectorized Pearson correlation between two users
         u1 = self.data[self.data['userId'] == user1][['movieId', 'rating']].rename(columns={'rating': 'x'})
         u2 = self.data[self.data['userId'] == user2][['movieId', 'rating']].rename(columns={'rating': 'y'})
         merged = u1.merge(u2, on='movieId', how='inner')
@@ -242,14 +229,12 @@ class UserBasedCF(BaseRecommender):
         Returns:
             float: Predicted rating (clamped to [1.0, 5.0] range)
         """
-        # Vectorized weighted deviation aggregation
         if not similarities:
             return float(self.user_mean.get(user_id, self.data['rating'].mean()))
         sim_arr = np.array([s for s, _ in similarities], dtype=float)
         other_users = np.array([u for _, u in similarities], dtype=int)
         target_user_mean = float(self.user_mean.get(user_id, self.data['rating'].mean()))
         other_means = self.user_mean.reindex(other_users).values
-        # Get other users' rating for item in vectorized form
         item_ratings = self.data[self.data['movieId'] == item_id][['userId', 'rating']]
         item_ratings = item_ratings.set_index('userId').reindex(other_users)['rating'].values
         denom = np.sum(np.abs(sim_arr))
@@ -314,9 +299,25 @@ class ItemBasedCF(BaseRecommender):
             ItemBasedCF: Self for method chaining
         """
         self.data = ratings_df
-        # Precompute per-item and per-user means
         self.item_mean = self.data.groupby('movieId')['rating'].mean()
         self.user_mean = self.data.groupby('userId')['rating'].mean()
+
+
+        df = self.data[['userId', 'movieId', 'rating']].copy()
+        df['adj'] = df['rating'] - df['userId'].map(self.user_mean)
+
+        self.item_users = (
+            df.groupby('movieId')['userId']
+            .apply(lambda s: s.values.astype('int32'))
+            .to_dict()
+        )
+        self.item_adj = (
+            df.groupby('movieId')['adj']
+            .apply(lambda s: s.values.astype('float32'))
+            .to_dict()
+        )
+        self.item_norm = {i: float(np.linalg.norm(v)) for i, v in self.item_adj.items()}
+
         self.is_fitted = True
         return self
     
@@ -344,7 +345,6 @@ class ItemBasedCF(BaseRecommender):
         if not self.is_fitted:
             raise ValueError("Model must be fitted before making predictions")
             
-        # Check if user already rated this item
         existing_rating = self.data[
             (self.data['userId'] == user_id) & 
             (self.data['movieId'] == item_id)
@@ -353,11 +353,20 @@ class ItemBasedCF(BaseRecommender):
         if not existing_rating.empty:
             return existing_rating['rating'].iloc[0]
         
-        # Find items that this user has rated
         relevant_items = self._find_relevant_items(user_id)
+
+        MAX_RELEVANT = max(3 * self.k, 200)
+        if len(relevant_items) > MAX_RELEVANT:
+            user_r = self.data[self.data['userId'] == user_id][['movieId', 'rating']].copy()
+            mu = float(self.user_mean.get(user_id, self.data['rating'].mean()))
+            user_r['abs_dev'] = (user_r['rating'] - mu).abs()
+            relevant_items = (
+                user_r.sort_values('abs_dev', ascending=False)
+                .head(MAX_RELEVANT)['movieId']
+                .values
+            )
         similarities = []
         
-        # Calculate similarities with relevant items (vectorized inside per-pair routine)
         for other_item in relevant_items:
             item_sim = self.__get_items_sim(item_id, other_item)
             if item_sim is None:
@@ -366,7 +375,6 @@ class ItemBasedCF(BaseRecommender):
                 self.similarity_cache[key] = item_sim
             similarities.append((item_sim, other_item))
         
-        # Sort by similarity (highest first) and select top k
         similarities.sort(reverse=True)
         if len(similarities) > self.k:
             similarities = similarities[:self.k]
@@ -418,21 +426,25 @@ class ItemBasedCF(BaseRecommender):
         Returns:
             float: Adjusted cosine similarity between -1 and 1
         """
-        # Vectorized adjusted cosine similarity between two items
-        i1 = self.data[self.data['movieId'] == item1][['userId', 'rating']].rename(columns={'rating': 'r1'})
-        i2 = self.data[self.data['movieId'] == item2][['userId', 'rating']].rename(columns={'rating': 'r2'})
-        merged = i1.merge(i2, on='userId', how='inner')
-        if merged.empty:
+        u1 = self.item_users.get(item1)
+        u2 = self.item_users.get(item2)
+        if u1 is None or u2 is None:
             return 0.0
-        # Adjust by user mean ratings
-        user_means = self.user_mean.reindex(merged['userId'].values).values
-        r1_adj = merged['r1'].values - user_means
-        r2_adj = merged['r2'].values - user_means
-        num = np.dot(r1_adj, r2_adj)
-        den = np.sqrt(np.dot(r1_adj, r1_adj) * np.dot(r2_adj, r2_adj))
-        if den == 0 or not np.isfinite(den):
+        common, idx1, idx2 = np.intersect1d(u1, u2, assume_unique=False, return_indices=True)
+        if common.size < 2:
             return 0.0
-        return float(num / den)
+        v1 = self.item_adj[item1][idx1]
+        v2 = self.item_adj[item2][idx2]
+        num = float(np.dot(v1, v2))
+        den = self.item_norm.get(item1, 0.0) * self.item_norm.get(item2, 0.0)
+        if den == 0.0 or not np.isfinite(den):
+            return 0.0
+        sim = num / den
+        alpha = 25.0
+        sim *= (common.size / (common.size + alpha))
+        if not np.isfinite(sim):
+            return 0.0
+        return float(sim)
     
     def __calculate_rating(self, similarities: list, item_id: int, user_id: int) -> float:
         """
@@ -454,7 +466,6 @@ class ItemBasedCF(BaseRecommender):
         target_item_mean = float(self.item_mean.get(item_id, self.data['rating'].mean()))
         sim_arr = np.array([s for s, _ in similarities], dtype=float)
         other_items = np.array([i for _, i in similarities], dtype=int)
-        # User's ratings for the similar items
         user_item_r = self.data[self.data['userId'] == user_id][['movieId', 'rating']]
         user_item_r = user_item_r.set_index('movieId').reindex(other_items)['rating'].values
         other_item_means = self.item_mean.reindex(other_items).values

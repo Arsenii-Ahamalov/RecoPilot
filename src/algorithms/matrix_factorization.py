@@ -60,14 +60,12 @@ class BasicMatrixFactorization(BaseRecommender):
         self.learning_rate = learning_rate
         self.reg = reg
         
-        # Will be initialized during fit()
         self.user_factors = None
         self.item_factors = None
         self.user_bias = None
         self.item_bias = None
         self.global_bias = None
         
-        # ID to matrix index mappings
         self.user_id_to_idx = {}
         self.item_id_to_idx = {}
     
@@ -92,7 +90,6 @@ class BasicMatrixFactorization(BaseRecommender):
         """
         self.data = ratings_df
         
-        # Create mappings from IDs to matrix indices
         unique_users = ratings_df['userId'].unique()
         unique_items = ratings_df['movieId'].unique()
         
@@ -102,16 +99,13 @@ class BasicMatrixFactorization(BaseRecommender):
         n_users = len(unique_users)
         n_items = len(unique_items)
         
-        # Initialize factor matrices with small random values (Xavier initialization)
         self.user_factors = np.random.normal(0, 0.1, (n_users, self.k))
         self.item_factors = np.random.normal(0, 0.1, (n_items, self.k))
         
-        # Initialize bias terms
         self.global_bias = ratings_df['rating'].mean()
         self.user_bias = np.zeros(n_users)
         self.item_bias = np.zeros(n_items)
         
-        # Prepare vectorized indices and ratings arrays for SGD-like updates
         if len(ratings_df) == 0:
             self.is_fitted = True
             return self
@@ -120,9 +114,7 @@ class BasicMatrixFactorization(BaseRecommender):
         item_indices = ratings_df['movieId'].map(self.item_id_to_idx).values
         ratings_array = ratings_df['rating'].values.astype(float)
 
-        # Epoch loop with vectorized mini-batch style updates
         for _ in range(self.epochs):
-            # Predictions for all observed entries
             preds = (
                 np.sum(self.user_factors[user_indices] * self.item_factors[item_indices], axis=1)
                 + self.user_bias[user_indices]
@@ -131,8 +123,6 @@ class BasicMatrixFactorization(BaseRecommender):
             )
             errors = ratings_array - preds
 
-            # Accumulate gradients per user and per item via scatter-add
-            # dL/dU[u] = -2 * sum_e(error_e * I[i_e]) + 2*reg*U[u]
             grad_user_factors = np.zeros_like(self.user_factors)
             np.add.at(grad_user_factors, user_indices, -(errors[:, None] * self.item_factors[item_indices]))
             grad_user_factors += self.reg * self.user_factors
@@ -149,7 +139,6 @@ class BasicMatrixFactorization(BaseRecommender):
             np.add.at(grad_item_bias, item_indices, -errors)
             grad_item_bias += self.reg * self.item_bias
 
-            # Gradient descent step
             self.user_factors -= self.learning_rate * grad_user_factors
             self.item_factors -= self.learning_rate * grad_item_factors
             self.user_bias -= self.learning_rate * grad_user_bias
