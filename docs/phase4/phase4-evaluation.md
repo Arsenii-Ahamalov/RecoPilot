@@ -24,13 +24,13 @@ Hybrid (uniform weights; tuned by cached‑prediction search over all non‑triv
 
 | Model                         | RMSE | MAE  | Notes                          |
 |------------------------------|-----:|-----:|--------------------------------|
-| UserBasedCF (k=50)           | 1.33 | 1.07 |                                |
-| ItemBasedCF (k=50)           | 1.38 | 1.10 | optimized similarity + caching |
-| GenreBasedRecommender        | 1.22 | 0.98 |                                |
-| DemographicBasedRecommender (k=50) | 1.33 | 1.07 |                        |
 | BasicMatrixFactorization (k=60, epochs=100, lr=0.0005, reg=0.1) | 1.12 | 0.94 | stable SGD                      |
-| SVDMatrixFactorization (k=60)| 1.48 | 1.15 |                                |
 | Hybrid: Genre + BasicMF (0.5/0.5) | 1.14 | 0.93 | best hybrid (uniform weights)  |
+| GenreBasedRecommender        | 1.22 | 0.98 |                                |
+| UserBasedCF (k=50)           | 1.33 | 1.07 |                                |
+| DemographicBasedRecommender (k=50) | 1.33 | 1.07 |                        |
+| ItemBasedCF (k=50)           | 1.38 | 1.10 | optimized similarity + caching |
+| SVDMatrixFactorization (k=60)| 1.48 | 1.15 |                                |
 
 Visuals:
 - User-based CF: ![user-based](plots/user_based_cf_results.png)
