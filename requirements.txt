@@ -4,8 +4,7 @@ scipy>=1.11.0
 matplotlib>=3.8.2
 pytest>=8.3.4
 scikit-learn>=1.3.2
-itertools>=1.3.2
-json>=2.0.9
-pathlib>=1.0.1Flask>=3.0.0
+Flask>=3.0.0
 flask-cors>=4.0.0
 requests>=2.31.0
+python-dotenv>=1.0.1

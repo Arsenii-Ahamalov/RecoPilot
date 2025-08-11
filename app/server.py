@@ -9,12 +9,15 @@ import numpy as np
 import json
 from pathlib import Path
 import uuid
+import requests
+from dotenv import load_dotenv
 
 # Your algorithms
 from src.algorithms.matrix_factorization import BasicMatrixFactorization, SVDMatrixFactorization
 from src.algorithms.collaborative_filtering import ItemBasedCF, UserBasedCF
 from src.algorithms.content_based import GenreBasedRecommender, DemographicBasedRecommender
 
+load_dotenv()  # load .env if present
 app = Flask(__name__, static_folder="static", static_url_path="/")
 CORS(app)
 
@@ -78,6 +81,60 @@ movie_meta = _build_movie_meta()
 _pop_counts = ratings.groupby("movieId").size().sort_values(ascending=False)
 _popular_ids = _pop_counts.index.to_numpy(dtype=int)
 
+# ---- TMDB posters (optional) ----
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or "81e33b129a44bb82c8779174ede456de"
+_POSTER_CACHE: dict[tuple[str, int | None], str | None] = {}
+
+def _fetch_poster_url(title: str | None, year: int | None) -> str | None:
+    if not TMDB_API_KEY or not title:
+        return None
+    # Normalize MovieLens titles like "Baby, The (1973)" -> "The Baby"
+    def _normalize(t: str) -> str:
+        t0 = t
+        # strip trailing year
+        t0 = re.sub(r"\s*\((\d{4})\)\s*$", "", t0).strip()
+        # if trailing article ", The|A|An"
+        m = re.match(r"^(.*),\s*(The|An|A)$", t0)
+        if m:
+            t0 = f"{m.group(2)} {m.group(1)}"
+        # remove other trailing parenthetical aliases (keep first part)
+        t0 = re.split(r"\s*\([^\)]*\)\s*", t0)[0].strip() or t0
+        return t0
+
+    qtitle = _normalize(title)
+    key = (qtitle.lower(), year)
+    if key in _POSTER_CACHE:
+        return _POSTER_CACHE[key]
+    try:
+        params = {"api_key": TMDB_API_KEY, "query": qtitle, "include_adult": False, "language": "en-US"}
+        if year:
+            params["year"] = int(year)
+        r = requests.get("https://api.themoviedb.org/3/search/movie", params=params, timeout=5)
+        r.raise_for_status()
+        data = r.json()
+        results = data.get("results", [])
+        poster_path = None
+        if results:
+            for res in results:
+                if res.get("poster_path"):
+                    poster_path = res["poster_path"]
+                    break
+        if not poster_path and year:
+            # retry without year if no result
+            r2 = requests.get("https://api.themoviedb.org/3/search/movie", params={"api_key": TMDB_API_KEY, "query": title}, timeout=5)
+            if r2.ok:
+                results = r2.json().get("results", [])
+                for res in results:
+                    if res.get("poster_path"):
+                        poster_path = res["poster_path"]
+                        break
+        url = f"https://image.tmdb.org/t/p/w342{poster_path}" if poster_path else None
+        _POSTER_CACHE[key] = url
+        return url
+    except Exception:
+        _POSTER_CACHE[key] = None
+        return None
+
 # ---- Best single model (default): BasicMF ----
 mf_params = json.loads(Path("models/BasicMatrixFactorization.json").read_text(encoding="utf-8"))
 default_model = BasicMatrixFactorization(**mf_params).fit(ratings)
@@ -134,7 +191,8 @@ def _popularity_sample(n: int = 20, offset: int = 0):
         mm = movie_meta.get(int(mid))
         title = mm.get("title") if mm else f"Movie {int(mid)}"
         year = mm.get("year") if mm else None
-        out.append({"movieId": int(mid), "title": title, "year": year})
+        poster = _fetch_poster_url(title, year)
+        out.append({"movieId": int(mid), "title": title, "year": year, "posterUrl": poster})
     return out
 
 def _append_session_ratings(base_df: pd.DataFrame, session_id: str) -> tuple[pd.DataFrame, int]:
@@ -201,6 +259,7 @@ def predict():
     # avoid duplicating year if title already embeds it
     if isinstance(title, str) and year and f"({year})" in title:
         pass  # keep as-is
+    poster = _fetch_poster_url(title, year)
     return jsonify({
         "prediction": round(pred, 1),
         "movieId": movie_id,
@@ -208,7 +267,8 @@ def predict():
         "year": year,
         "unknownUser": bool(unknown_user),
         "unknownItem": bool(unknown_item),
-        "model": model_name
+        "model": model_name,
+        "posterUrl": poster
     })
 
 @app.get("/recommend")
@@ -241,7 +301,8 @@ def recommend():
         mm = movie_meta.get(int(mid))
         title = mm.get("title") if mm else f"Movie {int(mid)}"
         year = mm.get("year") if mm else None
-        out.append({"movieId": int(mid), "score": float(round(score, 1)), "title": title, "year": year})
+        poster = _fetch_poster_url(title, year)
+        out.append({"movieId": int(mid), "score": float(round(score, 1)), "title": title, "year": year, "posterUrl": poster})
     return jsonify({"model": model_name, "items": out})
 
 @app.get("/models")

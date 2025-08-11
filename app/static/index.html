@@ -10,6 +10,9 @@
     pre { background: #f7f7f7; padding: 8px; white-space: pre-wrap; }
     button { cursor: pointer; }
     .muted { color: #777; }
+    .stars { display:inline-block; margin-left:6px; }
+    .stars span { cursor:pointer; font-size: 18px; color:#f5a623; user-select:none; }
+    .stars span.off { color:#d0d0d0; }
   </style>
 </head>
 <body>
@@ -23,7 +26,11 @@
 
   <section>
     <h3>2) Rate sample movies</h3>
-    <button id="btnLoad" onclick="loadSample(true)" disabled>Load 20 movies</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+      <button id="btnLoad" onclick="loadSample(true,false)" disabled>Load 20</button>
+      <button id="btnShuffle" onclick="loadSample(true,false)" disabled>Shuffle</button>
+      <button id="btnMore" onclick="loadSample(true,true)" disabled>Load more</button>
+    </div>
     <div id="sample"></div>
     <button id="btnSubmit" onclick="submitRatings()" disabled>Submit ratings</button>
     <div id="rateOut" class="muted"></div>
@@ -43,7 +50,8 @@
     </label>
     <input id="k" placeholder="k (default 10)" />
     <button id="btnRecs" onclick="getRecs()" disabled>Recommend</button>
-    <pre id="recs"></pre>
+    <div id="recsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;"></div>
+    <pre id="recs" class="muted"></pre>
   </section>
 
   <section>
@@ -72,34 +80,45 @@ async function startSession() {
 }
 
 let sampleClicks = 0;
-async function loadSample(increment=false) {
+async function loadSample(increment=false, append=false) {
   if (increment) sampleClicks += 1;
   const res = await fetch(`/movies/sample?size=20&offset=${sampleClicks}`);
   const items = await res.json();
   const container = document.getElementById('sample');
-  container.innerHTML = '';
-  ratingsDraft = {};
+  if (!append) {
+    container.innerHTML = '';
+    ratingsDraft = {};
+  }
   items.forEach(m => {
     const div = document.createElement('div');
     const hasYearInTitle = m.year && typeof m.title === 'string' && m.title.includes(`(${m.year})`);
     const year = m.year && !hasYearInTitle ? ` (${m.year})` : '';
+    const stars = [1,2,3,4,5].map(v=>`<span data-v="${v}" class="off">★</span>`).join('');
     div.innerHTML = `
       <span>${m.title || '(title N/A)'}${year}</span>
-      <input type="number" min="1" max="5" step="1" value="3" id="r_${m.movieId}">
+      <span class="stars" data-mid="${m.movieId}">${stars}</span>
     `;
     container.appendChild(div);
+  });
+  // attach star handlers
+  container.querySelectorAll('.stars').forEach(st => {
+    st.addEventListener('click', e => {
+      const target = e.target.closest('span[data-v]');
+      if (!target) return;
+      const v = Number(target.getAttribute('data-v'));
+      const mid = Number(st.getAttribute('data-mid'));
+      ratingsDraft[mid] = v;
+      [...st.querySelectorAll('span[data-v]')].forEach(s => {
+        const sv = Number(s.getAttribute('data-v'));
+        s.classList.toggle('off', sv > v);
+      });
+    });
   });
 }
 
 async function submitRatings() {
   if (!sessionId) { alert('Start session first'); return; }
-  const inputs = [...document.querySelectorAll('[id^=r_]')];
-  const payload = [];
-  inputs.forEach(inp => {
-    const mid = parseInt(inp.id.replace('r_', ''), 10);
-    const rt = parseFloat(inp.value);
-    payload.push({ movieId: mid, rating: rt });
-  });
+  const payload = Object.entries(ratingsDraft).map(([mid, rt]) => ({ movieId: Number(mid), rating: Number(rt) }));
   const res = await fetch('/rate', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ sessionId, ratings: payload })
@@ -118,11 +137,36 @@ async function getRecs() {
   const model = document.getElementById('model').value;
   const res = await fetch(`/recommend?sessionId=${sessionId}&k=${k}&model=${encodeURIComponent(model)}`);
   if (res.ok) {
-    document.getElementById('recs').textContent = JSON.stringify(await res.json(), null, 2);
+    const data = await res.json();
+    renderRecs(data);
   } else {
     const err = await res.json();
     document.getElementById('recs').textContent = err.message || 'Please rate some movies first.';
   }
+}
+
+function renderRecs(data){
+  const grid = document.getElementById('recsGrid');
+  grid.innerHTML = '';
+  const items = (data && data.items) || [];
+  items.forEach(it => {
+    const card = document.createElement('article');
+    card.style.border = '1px solid #eee';
+    card.style.borderRadius = '8px';
+    card.style.overflow = 'hidden';
+    card.style.background = '#fff';
+    const img = document.createElement('img');
+    img.src = it.posterUrl || 'https://via.placeholder.com/342x513?text=No+Image';
+    img.alt = it.title || 'poster';
+    img.style.width = '100%';
+    const caption = document.createElement('div');
+    caption.style.padding = '8px';
+    caption.innerHTML = `<strong>${it.title || ''}</strong><br><span class="muted">${it.year || ''}</span>`;
+    card.appendChild(img);
+    card.appendChild(caption);
+    grid.appendChild(card);
+  });
+  document.getElementById('recs').textContent = data && data.model ? `Model: ${data.model}` : '';
 }
 
 async function predict() {
