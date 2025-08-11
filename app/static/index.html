@@ -1,0 +1,134 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"><title>RecoPilot Demo</title>
+  <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2.0.6/css/pico.min.css">
+  <style>
+    body { max-width: 900px; margin: 24px auto; }
+    section { border: 1px solid var(--muted-border-color,#eaeaea); padding: 16px; border-radius: 8px; margin-bottom: 16px; }
+    input { margin: 4px 6px; }
+    pre { background: #f7f7f7; padding: 8px; white-space: pre-wrap; }
+    button { cursor: pointer; }
+    .muted { color: #777; }
+  </style>
+</head>
+<body>
+  <h1>RecoPilot Demo</h1>
+
+  <section>
+    <h3>1) Start session</h3>
+    <button id="btnStart" onclick="startSession()">Start</button>
+    <div id="sessionInfo" class="muted"></div>
+  </section>
+
+  <section>
+    <h3>2) Rate sample movies</h3>
+    <button id="btnLoad" onclick="loadSample(true)" disabled>Load 20 movies</button>
+    <div id="sample"></div>
+    <button id="btnSubmit" onclick="submitRatings()" disabled>Submit ratings</button>
+    <div id="rateOut" class="muted"></div>
+  </section>
+
+  <section>
+    <h3>3) Get recommendations</h3>
+    <input id="k" placeholder="k (default 10)" />
+    <button id="btnRecs" onclick="getRecs()" disabled>Recommend</button>
+    <pre id="recs"></pre>
+  </section>
+
+  <section>
+    <h3>Predict (debug)</h3>
+    <input id="p_user" placeholder="userId" />
+    <input id="p_item" placeholder="movieId" />
+    <button onclick="predict()">Predict</button>
+    <pre id="p_out"></pre>
+  </section>
+
+<script>
+let sessionId = null;
+let userId = null;
+let ratingsDraft = {}; // movieId -> rating
+
+async function startSession() {
+  const res = await fetch('/session/start', { method: 'POST' });
+  const data = await res.json();
+  sessionId = data.sessionId;
+  userId = data.userId;
+  document.getElementById('sessionInfo').textContent = `Session: ${sessionId}, userId: ${userId}`;
+  // enable buttons after session starts
+  document.getElementById('btnLoad').disabled = false;
+  document.getElementById('btnSubmit').disabled = false;
+  document.getElementById('btnRecs').disabled = false;
+}
+
+let sampleClicks = 0;
+async function loadSample(increment=false) {
+  if (increment) sampleClicks += 1;
+  const res = await fetch(`/movies/sample?size=20&offset=${sampleClicks}`);
+  const items = await res.json();
+  const container = document.getElementById('sample');
+  container.innerHTML = '';
+  ratingsDraft = {};
+  items.forEach(m => {
+    const div = document.createElement('div');
+    const hasYearInTitle = m.year && typeof m.title === 'string' && m.title.includes(`(${m.year})`);
+    const year = m.year && !hasYearInTitle ? ` (${m.year})` : '';
+    div.innerHTML = `
+      <span>${m.title || '(title N/A)'}${year}</span>
+      <input type="number" min="1" max="5" step="1" value="3" id="r_${m.movieId}">
+    `;
+    container.appendChild(div);
+  });
+}
+
+async function submitRatings() {
+  if (!sessionId) { alert('Start session first'); return; }
+  const inputs = [...document.querySelectorAll('[id^=r_]')];
+  const payload = [];
+  inputs.forEach(inp => {
+    const mid = parseInt(inp.id.replace('r_', ''), 10);
+    const rt = parseFloat(inp.value);
+    payload.push({ movieId: mid, rating: rt });
+  });
+  const res = await fetch('/rate', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ sessionId, ratings: payload })
+  });
+  const out = await res.json();
+  if (res.ok) {
+    document.getElementById('rateOut').textContent = `Saved ${out.numRatings} ratings.`;
+  } else {
+    document.getElementById('rateOut').textContent = out.message || 'Error saving ratings';
+  }
+}
+
+async function getRecs() {
+  if (!sessionId) { alert('Start session first'); return; }
+  const k = document.getElementById('k').value || 10;
+  const res = await fetch(`/recommend?sessionId=${sessionId}&k=${k}`);
+  if (res.ok) {
+    document.getElementById('recs').textContent = JSON.stringify(await res.json(), null, 2);
+  } else {
+    const err = await res.json();
+    document.getElementById('recs').textContent = err.message || 'Please rate some movies first.';
+  }
+}
+
+async function predict() {
+  const u = Number(document.getElementById('p_user').value);
+  const i = Number(document.getElementById('p_item').value);
+  try {
+    const res = await fetch('/predict', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      cache: 'no-store',
+      body: JSON.stringify({ userId: u, movieId: i })
+    });
+    const data = await res.json();
+    document.getElementById('p_out').textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    document.getElementById('p_out').textContent = 'Request failed';
+  }
+}
+</script>
+</body>
+</html>
