@@ -11,14 +11,19 @@ from pathlib import Path
 import uuid
 
 # Your algorithms
-from src.algorithms.matrix_factorization import BasicMatrixFactorization
-from src.algorithms.collaborative_filtering import ItemBasedCF
+from src.algorithms.matrix_factorization import BasicMatrixFactorization, SVDMatrixFactorization
+from src.algorithms.collaborative_filtering import ItemBasedCF, UserBasedCF
+from src.algorithms.content_based import GenreBasedRecommender, DemographicBasedRecommender
 
 app = Flask(__name__, static_folder="static", static_url_path="/")
 CORS(app)
 
 # ---- Load base data once ----
 ratings = pd.read_csv("data/ratings_processed.csv")
+try:
+    users_df = pd.read_csv("data/users_processed.csv")
+except Exception:
+    users_df = pd.DataFrame(columns=["userId"])  # minimal fallback
 
 # Prefer MovieLens raw titles from movies.dat; fallback to processed CSV if needed
 import re
@@ -76,6 +81,40 @@ _popular_ids = _pop_counts.index.to_numpy(dtype=int)
 # ---- Best single model (default): BasicMF ----
 mf_params = json.loads(Path("models/BasicMatrixFactorization.json").read_text(encoding="utf-8"))
 default_model = BasicMatrixFactorization(**mf_params).fit(ratings)
+
+# ---- Model registry (lazy-fit) ----
+MODEL_PARAMS = {
+    "BasicMF": json.loads(Path("models/BasicMatrixFactorization.json").read_text(encoding="utf-8")),
+    "ItemCF": json.loads(Path("models/ItemBasedCF.json").read_text(encoding="utf-8")),
+    "UserCF": json.loads(Path("models/UserBasedCF.json").read_text(encoding="utf-8")),
+    "Genre": json.loads(Path("models/GenreBasedRecommender.json").read_text(encoding="utf-8")),
+    "Demo": json.loads(Path("models/DemographicBasedRecommender.json").read_text(encoding="utf-8")),
+    "SVD": json.loads(Path("models/SVDMatrixFactorization.json").read_text(encoding="utf-8")),
+}
+MODEL_CACHE: dict[str, object] = {"BasicMF": default_model}
+ACTIVE_MODEL = "BasicMF"
+
+def get_model(name: str):
+    name = name or ACTIVE_MODEL
+    if name in MODEL_CACHE:
+        return MODEL_CACHE[name]
+    params = MODEL_PARAMS.get(name, {})
+    if name == "BasicMF":
+        m = BasicMatrixFactorization(**params).fit(ratings)
+    elif name == "ItemCF":
+        m = ItemBasedCF(**params).fit(ratings)
+    elif name == "UserCF":
+        m = UserBasedCF(**params).fit(ratings)
+    elif name == "Genre":
+        m = GenreBasedRecommender(); m.fit(ratings, pd.read_csv("data/movies_processed.csv"))
+    elif name == "Demo":
+        m = DemographicBasedRecommender(**params); m.fit(ratings, users_df)
+    elif name == "SVD":
+        m = SVDMatrixFactorization(**params).fit(ratings)
+    else:
+        raise ValueError("Unknown model")
+    MODEL_CACHE[name] = m
+    return m
 
 # ---- Session storage (in-memory) ----
 session_id_to_user = {}         # sessionId -> synthetic userId
@@ -151,9 +190,11 @@ def predict():
     payload = request.get_json(force=True)
     user_id = int(payload["userId"])
     movie_id = int(payload["movieId"])
-    unknown_user = user_id not in getattr(default_model, 'user_id_to_idx', {})
-    unknown_item = movie_id not in getattr(default_model, 'item_id_to_idx', {})
-    pred = float(default_model.predict(user_id, movie_id))
+    model_name = payload.get("model") or ACTIVE_MODEL
+    model = get_model(model_name)
+    unknown_user = user_id not in getattr(model, 'user_id_to_idx', {})
+    unknown_item = movie_id not in getattr(model, 'item_id_to_idx', {})
+    pred = float(model.predict(user_id, movie_id))
     mm = movie_meta.get(movie_id)
     title = mm.get("title") if mm else f"Movie {movie_id}"
     year = mm.get("year") if mm else None
@@ -166,13 +207,15 @@ def predict():
         "title": title,
         "year": year,
         "unknownUser": bool(unknown_user),
-        "unknownItem": bool(unknown_item)
+        "unknownItem": bool(unknown_item),
+        "model": model_name
     })
 
 @app.get("/recommend")
 def recommend():
     session_id = request.args.get("sessionId", "").strip()
     k = int(request.args.get("k", 10))
+    model_name = request.args.get("model") or ACTIVE_MODEL
 
     if not session_id:
         return jsonify({"error": "sessionId required"}), 400
@@ -182,8 +225,16 @@ def recommend():
 
     # Build temp DF with session ratings & recommend via fast ItemBasedCF
     tmp_df, user_id = _append_session_ratings(ratings, session_id)
-    icf = ItemBasedCF(k=50).fit(tmp_df)
-    recs = icf.recommend(user_id, k=k, exclude_seen=True)  # list of (score, movieId)
+    # Use model selection: ItemCF handles session ratings naturally; MF will fallback to default behavior
+    if model_name == "ItemCF":
+        params = MODEL_PARAMS.get("ItemCF", {})
+        model = ItemBasedCF(**params).fit(tmp_df)
+    elif model_name == "UserCF":
+        params = MODEL_PARAMS.get("UserCF", {})
+        model = UserBasedCF(**params).fit(tmp_df)
+    else:
+        model = get_model(model_name)
+    recs = model.recommend(user_id, k=k, exclude_seen=True)
 
     out = []
     for score, mid in recs:
@@ -191,7 +242,22 @@ def recommend():
         title = mm.get("title") if mm else f"Movie {int(mid)}"
         year = mm.get("year") if mm else None
         out.append({"movieId": int(mid), "score": float(round(score, 1)), "title": title, "year": year})
-    return jsonify(out)
+    return jsonify({"model": model_name, "items": out})
+
+@app.get("/models")
+def list_models():
+    return jsonify({"active": ACTIVE_MODEL, "available": list(MODEL_PARAMS.keys())})
+
+@app.post("/set_model")
+def set_model():
+    global ACTIVE_MODEL
+    name = request.get_json(force=True).get("model")
+    if name not in MODEL_PARAMS:
+        return jsonify({"error": "unknown_model"}), 400
+    ACTIVE_MODEL = name
+    # warm it
+    get_model(name)
+    return jsonify({"active": ACTIVE_MODEL})
 
 if __name__ == "__main__":
     # dev server

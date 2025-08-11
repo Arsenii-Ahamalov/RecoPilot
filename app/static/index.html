@@ -31,6 +31,16 @@
 
   <section>
     <h3>3) Get recommendations</h3>
+    <label>Model
+      <select id="model">
+        <option value="BasicMF" selected>BasicMF</option>
+        <option value="ItemCF">ItemCF</option>
+        <option value="UserCF">UserCF</option>
+        <option value="Genre">Genre</option>
+        <option value="Demo">Demo</option>
+        <option value="SVD">SVD</option>
+      </select>
+    </label>
     <input id="k" placeholder="k (default 10)" />
     <button id="btnRecs" onclick="getRecs()" disabled>Recommend</button>
     <pre id="recs"></pre>
@@ -105,7 +115,8 @@ async function submitRatings() {
 async function getRecs() {
   if (!sessionId) { alert('Start session first'); return; }
   const k = document.getElementById('k').value || 10;
-  const res = await fetch(`/recommend?sessionId=${sessionId}&k=${k}`);
+  const model = document.getElementById('model').value;
+  const res = await fetch(`/recommend?sessionId=${sessionId}&k=${k}&model=${encodeURIComponent(model)}`);
   if (res.ok) {
     document.getElementById('recs').textContent = JSON.stringify(await res.json(), null, 2);
   } else {
