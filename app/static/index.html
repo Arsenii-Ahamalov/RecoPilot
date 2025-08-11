@@ -26,14 +26,22 @@
 
   <section>
     <h3>2) Rate sample movies</h3>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-      <button id="btnLoad" onclick="loadSample(true,false)" disabled>Load 20</button>
-      <button id="btnShuffle" onclick="loadSample(true,false)" disabled>Shuffle</button>
-      <button id="btnMore" onclick="loadSample(true,true)" disabled>Load more</button>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+      <label style="margin:0;">Count
+        <input id="count" type="number" min="1" max="100" value="20" style="width:90px;">
+      </label>
+      <button id="btnLoad" onclick="loadSample(false,false)" disabled>Apply</button>
     </div>
     <div id="sample"></div>
     <button id="btnSubmit" onclick="submitRatings()" disabled>Submit ratings</button>
     <div id="rateOut" class="muted"></div>
+  </section>
+
+  <section>
+    <h3>2.1) Search & rate by title</h3>
+    <input id="q" placeholder="Type a movie title..." />
+    <button id="btnSearch" onclick="searchMovies()" disabled>Search</button>
+    <div id="searchResults"></div>
   </section>
 
   <section>
@@ -77,12 +85,12 @@ async function startSession() {
   document.getElementById('btnLoad').disabled = false;
   document.getElementById('btnSubmit').disabled = false;
   document.getElementById('btnRecs').disabled = false;
+  document.getElementById('btnSearch').disabled = false;
 }
 
-let sampleClicks = 0;
-async function loadSample(increment=false, append=false) {
-  if (increment) sampleClicks += 1;
-  const res = await fetch(`/movies/sample?size=20&offset=${sampleClicks}`);
+async function loadSample(_increment=false, append=false) {
+  const count = Number(document.getElementById('count').value) || 20;
+  const res = await fetch(`/movies/sample?size=${count}&mode=random`);
   const items = await res.json();
   const container = document.getElementById('sample');
   if (!append) {
@@ -95,6 +103,46 @@ async function loadSample(increment=false, append=false) {
     const year = m.year && !hasYearInTitle ? ` (${m.year})` : '';
     const stars = [1,2,3,4,5].map(v=>`<span data-v="${v}" class="off">★</span>`).join('');
     div.innerHTML = `
+      <span>${m.title || '(title N/A)'}${year}</span>
+      <span class="stars" data-mid="${m.movieId}">${stars}</span>
+    `;
+    container.appendChild(div);
+  });
+  // attach star handlers
+  container.querySelectorAll('.stars').forEach(st => {
+    st.addEventListener('click', e => {
+      const target = e.target.closest('span[data-v]');
+      if (!target) return;
+      const v = Number(target.getAttribute('data-v'));
+      const mid = Number(st.getAttribute('data-mid'));
+      ratingsDraft[mid] = v;
+      [...st.querySelectorAll('span[data-v]')].forEach(s => {
+        const sv = Number(s.getAttribute('data-v'));
+        s.classList.toggle('off', sv > v);
+      });
+    });
+  });
+}
+
+async function searchMovies(){
+  const term = (document.getElementById('q').value || '').trim();
+  if (!term) return;
+  const res = await fetch(`/movies/search?q=${encodeURIComponent(term)}&limit=20`);
+  const items = await res.json();
+  renderRateList(items, document.getElementById('searchResults'));
+}
+
+function renderRateList(items, container){
+  container.innerHTML = '';
+  items.forEach(m => {
+    const div = document.createElement('div');
+    const hasYearInTitle = m.year && typeof m.title === 'string' && m.title.includes(`(${m.year})`);
+    const year = m.year && !hasYearInTitle ? ` (${m.year})` : '';
+    const stars = [1,2,3,4,5].map(v=>`<span data-v="${v}" class="off">★</span>`).join('');
+    const poster = m.posterUrl || 'https://via.placeholder.com/92x138?text=No+Image';
+    div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
+    div.innerHTML = `
+      <img src="${poster}" alt="poster" style="width:46px;height:auto;border-radius:4px;"/>
       <span>${m.title || '(title N/A)'}${year}</span>
       <span class="stars" data-mid="${m.movieId}">${stars}</span>
     `;

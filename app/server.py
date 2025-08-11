@@ -85,23 +85,20 @@ _popular_ids = _pop_counts.index.to_numpy(dtype=int)
 TMDB_API_KEY = os.environ.get("TMDB_API_KEY") or "81e33b129a44bb82c8779174ede456de"
 _POSTER_CACHE: dict[tuple[str, int | None], str | None] = {}
 
+def _normalize_title_for_search(t: str) -> str:
+    t0 = t
+    t0 = re.sub(r"\s*\((\d{4})\)\s*$", "", t0).strip()
+    m = re.match(r"^(.*),\s*(The|An|A)$", t0)
+    if m:
+        t0 = f"{m.group(2)} {m.group(1)}"
+    # remove extra parenthetical aliases
+    t0 = re.split(r"\s*\([^\)]*\)\s*", t0)[0].strip() or t0
+    return t0
+
 def _fetch_poster_url(title: str | None, year: int | None) -> str | None:
     if not TMDB_API_KEY or not title:
         return None
-    # Normalize MovieLens titles like "Baby, The (1973)" -> "The Baby"
-    def _normalize(t: str) -> str:
-        t0 = t
-        # strip trailing year
-        t0 = re.sub(r"\s*\((\d{4})\)\s*$", "", t0).strip()
-        # if trailing article ", The|A|An"
-        m = re.match(r"^(.*),\s*(The|An|A)$", t0)
-        if m:
-            t0 = f"{m.group(2)} {m.group(1)}"
-        # remove other trailing parenthetical aliases (keep first part)
-        t0 = re.split(r"\s*\([^\)]*\)\s*", t0)[0].strip() or t0
-        return t0
-
-    qtitle = _normalize(title)
+    qtitle = _normalize_title_for_search(title)
     key = (qtitle.lower(), year)
     if key in _POSTER_CACHE:
         return _POSTER_CACHE[key]
@@ -179,13 +176,7 @@ session_id_to_ratings = {}      # sessionId -> list of dicts {movieId, rating}
 synthetic_user_start = 900000
 
 # ---- Helpers ----
-def _popularity_sample(n: int = 20, offset: int = 0):
-    # rotate through popular list based on offset to vary results
-    if len(_popular_ids) == 0:
-        ids = []
-    else:
-        start = offset % len(_popular_ids)
-        ids = np.roll(_popular_ids, -start)[:n]
+def _items_from_ids(ids):
     out = []
     for mid in ids:
         mm = movie_meta.get(int(mid))
@@ -222,9 +213,38 @@ def start_session():
 @app.get("/movies/sample")
 def movies_sample():
     size = int(request.args.get("size", 20))
-    # allow client to pass a seed/offset to rotate results
-    offset = int(request.args.get("offset", np.random.randint(0, max(1, len(_popular_ids)))))
-    return jsonify(_popularity_sample(size, offset))
+    mode = request.args.get("mode", "random")
+    size = max(1, min(100, size))
+    if mode == "popular":
+        ids = _popular_ids[:size]
+    else:
+        # random selection from full set
+        if len(_popular_ids) == 0:
+            ids = []
+        else:
+            idx = np.random.choice(_popular_ids, size=min(size, len(_popular_ids)), replace=False)
+            ids = idx.tolist()
+    return jsonify(_items_from_ids(ids))
+
+@app.get("/movies/search")
+def movies_search():
+    q = (request.args.get("q") or "").strip()
+    limit = int(request.args.get("limit", 20))
+    limit = max(1, min(50, limit))
+    if not q:
+        return jsonify([])
+    nq = _normalize_title_for_search(q).lower()
+    # simple contains match over titles, ranked by popularity count
+    matches = []
+    for mid, meta in movie_meta.items():
+        title = (meta.get("title") or "")
+        tnorm = _normalize_title_for_search(str(title)).lower()
+        if nq in tnorm:
+            pop = int(_pop_counts.get(mid, 0)) if hasattr(_pop_counts, 'get') else 0
+            matches.append((pop, mid))
+    matches.sort(reverse=True)
+    ids = [mid for _, mid in matches[:limit]]
+    return jsonify(_items_from_ids(ids))
 
 @app.post("/rate")
 def rate():
