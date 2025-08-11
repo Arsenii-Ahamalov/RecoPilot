@@ -13,6 +13,10 @@
     .stars { display:inline-block; margin-left:6px; }
     .stars span { cursor:pointer; font-size: 18px; color:#f5a623; user-select:none; }
     .stars span.off { color:#d0d0d0; }
+    .fade { opacity: 0; transform: translateY(6px); transition: opacity .25s ease, transform .25s ease; }
+    .fade.show { opacity: 1; transform: none; }
+    .spinner { display:none; width:18px; height:18px; border:2px solid #ddd; border-top-color:#555; border-radius:50%; animation: spin .7s linear infinite; margin-left:6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -31,6 +35,7 @@
         <input id="count" type="number" min="1" max="100" value="20" style="width:90px;">
       </label>
       <button id="btnLoad" onclick="loadSample(false,false)" disabled>Apply</button>
+      <span id="spinnerSample" class="spinner" aria-hidden="true"></span>
     </div>
     <div id="sample"></div>
     <button id="btnSubmit" onclick="submitRatings()" disabled>Submit ratings</button>
@@ -41,6 +46,7 @@
     <h3>2.1) Search & rate by title</h3>
     <input id="q" placeholder="Type a movie title..." />
     <button id="btnSearch" onclick="searchMovies()" disabled>Search</button>
+    <span id="spinnerSearch" class="spinner" aria-hidden="true"></span>
     <div id="searchResults"></div>
   </section>
 
@@ -90,6 +96,9 @@ async function startSession() {
 
 async function loadSample(_increment=false, append=false) {
   const count = Number(document.getElementById('count').value) || 20;
+  const btn = document.getElementById('btnLoad');
+  const sp = document.getElementById('spinnerSample');
+  btn.disabled = true; sp.style.display = 'inline-block';
   const res = await fetch(`/movies/sample?size=${count}&mode=random`);
   const items = await res.json();
   const container = document.getElementById('sample');
@@ -102,11 +111,13 @@ async function loadSample(_increment=false, append=false) {
     const hasYearInTitle = m.year && typeof m.title === 'string' && m.title.includes(`(${m.year})`);
     const year = m.year && !hasYearInTitle ? ` (${m.year})` : '';
     const stars = [1,2,3,4,5].map(v=>`<span data-v="${v}" class="off">★</span>`).join('');
+    div.className = 'fade';
     div.innerHTML = `
       <span>${m.title || '(title N/A)'}${year}</span>
       <span class="stars" data-mid="${m.movieId}">${stars}</span>
     `;
     container.appendChild(div);
+    requestAnimationFrame(()=>div.classList.add('show'));
   });
   // attach star handlers
   container.querySelectorAll('.stars').forEach(st => {
@@ -122,14 +133,19 @@ async function loadSample(_increment=false, append=false) {
       });
     });
   });
+  btn.disabled = false; sp.style.display = 'none';
 }
 
 async function searchMovies(){
   const term = (document.getElementById('q').value || '').trim();
   if (!term) return;
+  const btn = document.getElementById('btnSearch');
+  const sp = document.getElementById('spinnerSearch');
+  btn.disabled = true; sp.style.display = 'inline-block';
   const res = await fetch(`/movies/search?q=${encodeURIComponent(term)}&limit=20`);
   const items = await res.json();
   renderRateList(items, document.getElementById('searchResults'));
+  btn.disabled = false; sp.style.display = 'none';
 }
 
 function renderRateList(items, container){
@@ -141,12 +157,14 @@ function renderRateList(items, container){
     const stars = [1,2,3,4,5].map(v=>`<span data-v="${v}" class="off">★</span>`).join('');
     const poster = m.posterUrl || 'https://via.placeholder.com/92x138?text=No+Image';
     div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
+    div.className = 'fade';
     div.innerHTML = `
       <img src="${poster}" alt="poster" style="width:46px;height:auto;border-radius:4px;"/>
       <span>${m.title || '(title N/A)'}${year}</span>
       <span class="stars" data-mid="${m.movieId}">${stars}</span>
     `;
     container.appendChild(div);
+    requestAnimationFrame(()=>div.classList.add('show'));
   });
   // attach star handlers
   container.querySelectorAll('.stars').forEach(st => {
@@ -203,6 +221,7 @@ function renderRecs(data){
     card.style.borderRadius = '8px';
     card.style.overflow = 'hidden';
     card.style.background = '#fff';
+    card.className = 'fade';
     const img = document.createElement('img');
     img.src = it.posterUrl || 'https://via.placeholder.com/342x513?text=No+Image';
     img.alt = it.title || 'poster';
@@ -213,6 +232,7 @@ function renderRecs(data){
     card.appendChild(img);
     card.appendChild(caption);
     grid.appendChild(card);
+    requestAnimationFrame(()=>card.classList.add('show'));
   });
   document.getElementById('recs').textContent = data && data.model ? `Model: ${data.model}` : '';
 }
