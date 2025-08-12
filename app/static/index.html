@@ -36,19 +36,17 @@
       </label>
       <button id="btnLoad" onclick="loadSample(false,false)" disabled>Apply</button>
       <span id="spinnerSample" class="spinner" aria-hidden="true"></span>
+      <input id="q" placeholder="Search by title..." style="margin-left:auto;" />
+      <button id="btnSearch" onclick="searchMovies()" disabled>Search</button>
+      <span id="spinnerSearch" class="spinner" aria-hidden="true"></span>
     </div>
     <div id="sample"></div>
+    <div id="searchResults"></div>
     <button id="btnSubmit" onclick="submitRatings()" disabled>Submit ratings</button>
     <div id="rateOut" class="muted"></div>
   </section>
 
-  <section>
-    <h3>2.1) Search & rate by title</h3>
-    <input id="q" placeholder="Type a movie title..." />
-    <button id="btnSearch" onclick="searchMovies()" disabled>Search</button>
-    <span id="spinnerSearch" class="spinner" aria-hidden="true"></span>
-    <div id="searchResults"></div>
-  </section>
+  
 
   <section>
     <h3>3) Get recommendations</h3>
