@@ -1,4 +1,4 @@
-# RecoPilot
+![RecoPilot](docs/assets/logo.png)
 
 **A Movie-Lens 1M based movie-recommendation project**
 
