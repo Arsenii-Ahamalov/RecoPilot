@@ -56,6 +56,7 @@ RecoPilot/
 │   │   ├── conclusion.md          # Phase 4 summary and results
 │   │   └── plots/                 # Phase 4 result plots
 │   └── assets/
+│       ├── logo.png               # Project logo (transparent background)
 │       ├── reco-demo.gif          # README demo (optimized GIF)
 │       └── reco-demo.mp4          # README demo (HQ MP4)
 │
