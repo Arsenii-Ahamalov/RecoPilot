@@ -62,17 +62,12 @@
     </label>
     <input id="k" placeholder="k (default 10)" />
     <button id="btnRecs" onclick="getRecs()" disabled>Recommend</button>
+    <span id="spinnerRecs" class="spinner" aria-hidden="true"></span>
     <div id="recsGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;"></div>
     <pre id="recs" class="muted"></pre>
   </section>
 
-  <section>
-    <h3>Predict (debug)</h3>
-    <input id="p_user" placeholder="userId" />
-    <input id="p_item" placeholder="movieId" />
-    <button onclick="predict()">Predict</button>
-    <pre id="p_out"></pre>
-  </section>
+  
 
 <script>
 let sessionId = null;
@@ -109,8 +104,11 @@ async function loadSample(_increment=false, append=false) {
     const hasYearInTitle = m.year && typeof m.title === 'string' && m.title.includes(`(${m.year})`);
     const year = m.year && !hasYearInTitle ? ` (${m.year})` : '';
     const stars = [1,2,3,4,5].map(v=>`<span data-v="${v}" class="off">★</span>`).join('');
+    const poster = m.posterUrl || 'https://via.placeholder.com/92x138?text=No+Image';
     div.className = 'fade';
+    div.style.display = 'flex'; div.style.alignItems = 'center'; div.style.gap = '8px';
     div.innerHTML = `
+      <img src="${poster}" alt="poster" style="width:46px;height:auto;border-radius:4px;"/>
       <span>${m.title || '(title N/A)'}${year}</span>
       <span class="stars" data-mid="${m.movieId}">${stars}</span>
     `;
@@ -199,13 +197,24 @@ async function getRecs() {
   if (!sessionId) { alert('Start session first'); return; }
   const k = document.getElementById('k').value || 10;
   const model = document.getElementById('model').value;
-  const res = await fetch(`/recommend?sessionId=${sessionId}&k=${k}&model=${encodeURIComponent(model)}`);
-  if (res.ok) {
-    const data = await res.json();
-    renderRecs(data);
-  } else {
-    const err = await res.json();
-    document.getElementById('recs').textContent = err.message || 'Please rate some movies first.';
+  const btn = document.getElementById('btnRecs');
+  const sp = document.getElementById('spinnerRecs');
+  btn.disabled = true; sp.style.display = 'inline-block';
+  try {
+    const res = await fetch(`/recommend?sessionId=${sessionId}&k=${k}&model=${encodeURIComponent(model)}`);
+    if (res.ok) {
+      const data = await res.json();
+      renderRecs(data);
+    } else {
+      const err = await res.json();
+      document.getElementById('recs').textContent = err.message || 'Please rate some movies first.';
+      document.getElementById('recsGrid').innerHTML = '';
+    }
+  } catch (_e) {
+    document.getElementById('recs').textContent = 'Request failed';
+    document.getElementById('recsGrid').innerHTML = '';
+  } finally {
+    btn.disabled = false; sp.style.display = 'none';
   }
 }
 
@@ -235,21 +244,7 @@ function renderRecs(data){
   document.getElementById('recs').textContent = data && data.model ? `Model: ${data.model}` : '';
 }
 
-async function predict() {
-  const u = Number(document.getElementById('p_user').value);
-  const i = Number(document.getElementById('p_item').value);
-  try {
-    const res = await fetch('/predict', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      cache: 'no-store',
-      body: JSON.stringify({ userId: u, movieId: i })
-    });
-    const data = await res.json();
-    document.getElementById('p_out').textContent = JSON.stringify(data, null, 2);
-  } catch (e) {
-    document.getElementById('p_out').textContent = 'Request failed';
-  }
-}
+ 
 </script>
 </body>
 </html>
